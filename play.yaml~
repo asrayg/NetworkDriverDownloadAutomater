@@ -1,0 +1,318 @@
+---
+- name: Example Simple Playbook
+  hosts: all
+  become: yes
+  vars:
+    # folder where all quectel related stuff locate to be copied over (write notes later)
+    quectel_folder: /home/ara/quectel/quectel_files/original/
+    quectel_config_folder: /home/ara/quectel/quectel_files/08_CONFIGURE_QUECTEL_SCRIPT/
+    remote_quectel_folder: /home/{{ hostvars[inventory_hostname]['ansible_user'] }}/quectelFiles/
+    skylark_folder: /home/ara/skylark/ara-flco-packages/
+    skylark_cpe_folder: cpe_host_02_27_24
+    remote_skylark_folder: /home/{{ hostvars[inventory_hostname]['ansible_user'] }}/skylark/ara-flco/
+    driver_versions: []
+    closest_versions: []
+    firmware_versions: []
+    skylark_basic_deb_files: []
+    skylark_deb_files: []
+
+  tasks:
+  # Basic tasks
+  - name: Ping my hosts
+    ping:
+
+  - name: Upgrade OS (dist-upgrade)
+    apt:
+      upgrade: dist
+
+  - name: Ensure all packages are up to date
+    apt:
+      update_cache: yes
+
+  - name: Install minicom
+    apt:
+      name: minicom
+
+  # Copy all quectel folders and files
+  - name: Find all quectel folders
+    find:
+      paths: "{{ quectel_folder }}"
+      file_type: directory
+    delegate_to: 127.0.0.1
+    register: folders
+
+  - name: Sort file names from the {{ quectel_folder }}
+    set_fact:
+      folder_found: "{{ folders.files | map(attribute='path') | sort }}"
+
+  - name: All quectel related folders
+    debug:
+      var: folder_found
+
+  - name: Ensure there are 7 quectel folders exist
+    fail:
+      msg: "Folder does not contain exactly 7 quectel files"
+    when: folder_found | length != 7
+
+  - name: Copy quectel folder {{ folder_found[0].split('/')[-1] }} over to remote location
+    copy:
+      remote_src: no
+      src: "{{ folder_found[0] }}"
+      dest: "{{ remote_quectel_folder }}"
+      mode: '666'
+
+  - name: Copy quectel folder {{ folder_found[1].split('/')[-1] }} over to remote location
+    copy:
+      remote_src: no
+      src: "{{ folder_found[1] }}"
+      dest: "{{ remote_quectel_folder }}"
+      mode: '666'
+
+  - name: Copy quectel folder {{ folder_found[2].split('/')[-1] }} over to remote location
+    copy:
+      remote_src: no
+      src: "{{ folder_found[2] }}"
+      dest: "{{ remote_quectel_folder }}"
+      mode: '666'
+
+  - name: Copy quectel folder {{ folder_found[3].split('/')[-1] }} over to remote location
+    copy:
+      remote_src: no
+      src: "{{ folder_found[3] }}"
+      dest: "{{ remote_quectel_folder }}"
+      mode: '666'
+
+  - name: Copy quectel folder {{ folder_found[4].split('/')[-1] }} over to remote location
+    copy:
+      remote_src: no
+      src: "{{ folder_found[4] }}"
+      dest: "{{ remote_quectel_folder }}"
+      mode: '666'
+
+  - name: Copy quectel folder {{ folder_found[5].split('/')[-1] }} over to remote location
+    copy:
+      remote_src: no
+      src: "{{ folder_found[5] }}"
+      dest: "{{ remote_quectel_folder }}"
+      mode: '666'
+
+  - name: Copy quectel folder {{ folder_found[6].split('/')[-1] }} over to remote location
+    copy:
+      remote_src: no
+      src: "{{ folder_found[6] }}"
+      dest: "{{ remote_quectel_folder }}"
+      mode: '666'
+
+  # Installing USB driver
+  - name: Retrieve kernel version
+    command: uname -r
+    register: uname
+
+  - name: Kernel version
+    debug:
+      msg: "Kernel version: {{ uname.stdout }}"
+
+  - name: Determine USB driver
+    set_fact:
+      kernel_version: "{{ uname.stdout.split('-')[0].split('.') }}"
+
+  - name: Retrieve all possible USB driver version
+    find:
+      paths: "{{ remote_quectel_folder }}{{ folder_found[5].split('/')[-1] }}"
+      file_type: directory
+    register: available_driver_versions
+
+  - name: Extract USB driver version from each of the full path
+    set_fact:
+      driver_versions: "{{ driver_versions + [item.path.split('/')[-1]] }}"
+    loop: "{{ available_driver_versions.files }}"
+
+  - name: Group similar USB driver version
+    set_fact:
+      closest_versions: "{{ closest_versions + [item] }}"
+    when: item.split('.')[0][-1] == kernel_version[0] and item.split('.')[1] == kernel_version[1]
+    loop: "{{ driver_versions }}"
+
+  - name: Retrieve closest matching USB driver version
+    set_fact:
+      selected_driver_version: "{{ item }}"
+    when: (item.split('.')[-1] >= kernel_version[-1] and item.split('.')[-1] <= selected_driver_version.split('.')[-1]) or selected_driver_version is not defined
+    loop: "{{ closest_versions }}"
+
+  - name: Using {{ selected_driver_version }} as our USB driver version
+    debug:
+      msg: "Driver version: {{ selected_driver_version }}"
+
+  - name: Install USB driver based on kernel version
+    command:
+      cmd: "{{ item }}"
+      chdir: "{{ remote_quectel_folder }}{{ folder_found[5].split('/')[-1] }}/{{ selected_driver_version }}"
+    with_items:
+      - sudo make
+      - sudo make install
+
+  - name: Retrieve all available ttyUSB files (Ensure USB driver has been installed correctly)
+    find:
+      paths: /dev
+      patterns: 'ttyUSB*'
+      file_type: file
+    register: ttyusb_files
+
+
+
+  # once complete remember to change debug back to fail to output error when ttyUSB cannot be detected after installing driver
+
+
+
+
+  - name: Count the number of ttyUSB* devices
+    debug:
+      msg: "Could not detect all four device file (ttyUSB0, ttyUSB1, ttyUSB2, ttyUSB3)"
+    when: "{{ ttyusb_files.files | length < 4 }}"
+
+  # Installing QMI_WWAN driver
+  - name: Install QMI_WWAN driver
+    command:
+      cmd: "{{ item }}"
+      chdir: "{{ remote_quectel_folder }}{{ folder_found[4].split('/')[-1] }}/"
+    with_items:
+      - sudo make
+      - sudo make install
+
+  - name: Configure blacklist.conf to disable default qmi_wwan
+    become: yes
+    lineinfile:
+      path: /etc/modprobe.d/blacklist.conf
+      line: "{{ item }}"
+      insertafter: EOF
+    with_items:
+      - "\n"
+      - "blacklist qmi_wwan"
+
+  - name: Disable qmi_wwan and load Quectel qmi_wwan_q (ignore error since command "sudo rmmod qmi_wwan" will throw error if it is not loaded)
+    command:
+      cmd: "{{ item }}"
+    ignore_errors: true
+    with_items:
+      - sudo rmmod qmi_wwan
+      - sudo modprobe qmi_wwan_q
+
+  - name: Stop and disable Modem Manager from running, to avoid using qmi_wwan on reboot
+    systemd:
+      name: ModemManager
+      state: stopped
+      enabled: no
+
+  - name: Gather facts about different services
+    service_facts:
+
+  - name: Ensure Modem Manager is not running and it is disabled
+    fail:
+      msg: "ModemManager service has not fully disabled"
+    when: ansible_facts.services['ModemManager.service']['status'] != 'disabled'
+
+  # Installing Quectel connector manager
+  - name: Create udhcpc folder to be used by the system for setting up DNS and route
+    file:
+      path: /etc/udhcpc
+      state: directory
+
+  - name: Install Quectel connector manager
+    command:
+      cmd: "{{ item }}"
+      chdir: "{{ remote_quectel_folder }}{{ folder_found[1].split('/')[-1] }}/"
+    with_items:
+      - sudo cp default.script /etc/udhcpc/
+      - sudo cp default.script u+x
+      - sudo make
+
+  - name: Create minicom dfl file
+    file:
+      path: /etc/minicom/minirc.dfl
+      state: touch
+
+  - name: Configure minicom dfl file to change default serial to ttyUSB2
+    become: yes
+    lineinfile:
+      path: /etc/minicom/minirc.dfl
+      line: "{{ item }}"
+      insertafter: EOF
+    with_items:
+      - "pu port /dev/ttyUSB2"
+      - ""
+
+  # Updating firmware of the respective quectel
+  - name: Find all available quectel firmware
+    find:
+      paths: "{{ remote_quectel_folder }}{{ folder_found[3].split('/')[-1] }}/"
+      file_type: directory
+    register: firmware_folders
+
+  - name: Retrive available firmware version
+    set_fact:
+      firmware_versions: "{{ firmware_versions + [item.path.split('/')[-1]] }}"
+    loop: "{{ firmware_folders.files }}"
+
+  - name: Compare and use the latest firmware version
+    set_fact:
+      selected_firmware_version: "{{ item }}"
+    when: item >= selected_firmware_version or selected_firmware_version is not defined
+    loop: "{{ firmware_versions }}"
+
+  - name: Update firmware version of the current quectel unit
+    command:
+      cmd: "{{ item }}"
+      chdir: "{{ remote_quectel_folder }}{{ folder_found[0].split('/')[-1] }}/"
+    with_items:
+      - sudo make
+      - sudo ./QFirehose -f  "{{ remote_quectel_folder }}{{ folder_found[3].split('/')[-1] }}/{{ selected_firmware_version }}"
+    when: "{{ ttyusb_files.files | length >= 4 }}"
+
+  # Copy configuration script for quectel unit
+  - name: Copying script for configuring quectel unit from scratch
+    copy:
+      remote_src: no
+      src: "{{ quectel_config_folder }}"
+      dest: "{{ remote_quectel_folder }}"
+      mode: '666'
+
+  # Installing skylark software
+  - name: Copying Skylark CPE folder over to remote location
+    copy:
+      remote_src: no
+      src: "{{ skylark_folder }}"
+      dest: "{{ remote_skylark_folder }}"
+      mode: '666'
+    register: git_clone_result
+
+  - name: Retrieve all basic deb packages for Skylark
+    find:
+      path: "{{ remote_skylark_folder }}debs"
+      patterns: "*.deb"
+    register: all_available_basic_deb_files_skylark
+
+  - name: Extract Skylark basic deb file name from each of the full path from all_available_basic_deb_files_skylark
+    set_fact:
+      skylark_basic_deb_files: "{{ skylark_basic_deb_files + [item.path] }}"
+    loop: "{{ all_available_basic_deb_files_skylark.files }}"
+
+  - name: Installing all basic required packages for Skylark (Part 1)
+    command:
+      cmd: "sudo apt install --fix-broken {{ item }} -y"
+    loop: "{{ skylark_basic_deb_files }}"
+
+  - name: Retrieve all deb packages for CPE version for {{ skylark_cpe_folder }}
+    find:
+      paths: "{{ remote_skylark_folder }}{{ skylark_cpe_folder }}"
+      patterns: "*deb"
+    register: all_available_deb_files_skylark
+
+  - name: Extract Skylark deb file name from each of the full path from all_available_deb_files_skylark
+    set_fact:
+      skylark_deb_files: "{{ skylark_deb_files + [item.path] }}"
+    loop: "{{ all_available_deb_files_skylark.files }}"
+
+  - name: Installing all required packages for Skylark (Part 2)
+    command:
+      cmd: "sudo apt install --fix-broken {{ item }} -y"
+    loop: "{{ skylark_deb_files }}"

@@ -1,0 +1,4 @@
+[control]
+# 10.42.0.1 ansible_user=compute ansible_password=arapassword ansible_become=true ansible_sudo_pass=arapassword
+# 10.26.48.35 ansible_user=compute ansible_password=arapassword ansible_become=true ansible_sudo_pass=arapassword
+10.26.50.183 ansible_user=compute ansible_password=arapassword ansible_become=true ansible_sudo_pass=arapassword

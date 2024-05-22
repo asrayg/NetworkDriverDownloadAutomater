@@ -1,0 +1,14 @@
+1. install ansible
+   1. $ sudo apt update
+   2. $ sudo apt install software-properties-common
+   3. $ sudo apt-add-repository --yes --update ppa:ansible/ansible
+   4. $ sudo apt install ansible
+
+2. to check the inventory file in a dictionary format
+   1. $ansible-inventory -i <multinode_file> --list
+
+3. to check full log for service
+   1. $journalctl -e -u testing_service.service
+
+4. to run the ansible using multinode and playbook
+   1. $ansible-inventory -i <multinode_file> <playbook_file>
