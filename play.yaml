@@ -1,9 +1,8 @@
 ---
-- name: Example Simple Playbook
+- name: Comprehensive System Configuration and Software Deployment Playbook
   hosts: all
   become: yes
   vars:
-    # folder where all quectel related stuff locate to be copied over (write notes later)
     quectel_folder: /home/ara/quectel/quectel_files/original/
     quectel_config_folder: /home/ara/quectel/quectel_files/08_CONFIGURE_QUECTEL_SCRIPT/
     remote_quectel_folder: /home/{{ hostvars[inventory_hostname]['ansible_user'] }}/quectelFiles/
@@ -17,7 +16,6 @@
     skylark_deb_files: []
 
   tasks:
-  # Basic tasks
   - name: Ping my hosts
     ping:
 
@@ -33,7 +31,6 @@
     apt:
       name: minicom
 
-  # Copy all quectel folders and files
   - name: Find all quectel folders
     find:
       paths: "{{ quectel_folder }}"
@@ -41,7 +38,7 @@
     delegate_to: 127.0.0.1
     register: folders
 
-  - name: Sort file names from the {{ quectel_folder }}
+  - name: Sort file names from the quectel_folder
     set_fact:
       folder_found: "{{ folders.files | map(attribute='path') | sort }}"
 
@@ -49,61 +46,19 @@
     debug:
       var: folder_found
 
-  - name: Ensure there are 7 quectel folders exist
+  - name: Ensure there are 7 quectel folders
     fail:
       msg: "Folder does not contain exactly 7 quectel files"
     when: folder_found | length != 7
 
-  - name: Copy quectel folder {{ folder_found[0].split('/')[-1] }} over to remote location
+  - name: Copy quectel folders to remote location
     copy:
       remote_src: no
-      src: "{{ folder_found[0] }}"
+      src: "{{ item }}"
       dest: "{{ remote_quectel_folder }}"
       mode: '666'
+    loop: "{{ folder_found }}"
 
-  - name: Copy quectel folder {{ folder_found[1].split('/')[-1] }} over to remote location
-    copy:
-      remote_src: no
-      src: "{{ folder_found[1] }}"
-      dest: "{{ remote_quectel_folder }}"
-      mode: '666'
-
-  - name: Copy quectel folder {{ folder_found[2].split('/')[-1] }} over to remote location
-    copy:
-      remote_src: no
-      src: "{{ folder_found[2] }}"
-      dest: "{{ remote_quectel_folder }}"
-      mode: '666'
-
-  - name: Copy quectel folder {{ folder_found[3].split('/')[-1] }} over to remote location
-    copy:
-      remote_src: no
-      src: "{{ folder_found[3] }}"
-      dest: "{{ remote_quectel_folder }}"
-      mode: '666'
-
-  - name: Copy quectel folder {{ folder_found[4].split('/')[-1] }} over to remote location
-    copy:
-      remote_src: no
-      src: "{{ folder_found[4] }}"
-      dest: "{{ remote_quectel_folder }}"
-      mode: '666'
-
-  - name: Copy quectel folder {{ folder_found[5].split('/')[-1] }} over to remote location
-    copy:
-      remote_src: no
-      src: "{{ folder_found[5] }}"
-      dest: "{{ remote_quectel_folder }}"
-      mode: '666'
-
-  - name: Copy quectel folder {{ folder_found[6].split('/')[-1] }} over to remote location
-    copy:
-      remote_src: no
-      src: "{{ folder_found[6] }}"
-      dest: "{{ remote_quectel_folder }}"
-      mode: '666'
-
-  # Installing USB driver
   - name: Retrieve kernel version
     command: uname -r
     register: uname
@@ -116,18 +71,18 @@
     set_fact:
       kernel_version: "{{ uname.stdout.split('-')[0].split('.') }}"
 
-  - name: Retrieve all possible USB driver version
+  - name: Retrieve all possible USB driver versions
     find:
       paths: "{{ remote_quectel_folder }}{{ folder_found[5].split('/')[-1] }}"
       file_type: directory
     register: available_driver_versions
 
-  - name: Extract USB driver version from each of the full path
+  - name: Extract USB driver version from each full path
     set_fact:
       driver_versions: "{{ driver_versions + [item.path.split('/')[-1]] }}"
     loop: "{{ available_driver_versions.files }}"
 
-  - name: Group similar USB driver version
+  - name: Group similar USB driver versions
     set_fact:
       closest_versions: "{{ closest_versions + [item] }}"
     when: item.split('.')[0][-1] == kernel_version[0] and item.split('.')[1] == kernel_version[1]
@@ -139,7 +94,7 @@
     when: (item.split('.')[-1] >= kernel_version[-1] and item.split('.')[-1] <= selected_driver_version.split('.')[-1]) or selected_driver_version is not defined
     loop: "{{ closest_versions }}"
 
-  - name: Using {{ selected_driver_version }} as our USB driver version
+  - name: Using selected USB driver version
     debug:
       msg: "Driver version: {{ selected_driver_version }}"
 
@@ -147,7 +102,7 @@
     command:
       cmd: "{{ item }}"
       chdir: "{{ remote_quectel_folder }}{{ folder_found[5].split('/')[-1] }}/{{ selected_driver_version }}"
-    with_items:
+    loop:
       - sudo make
       - sudo make install
 
@@ -158,24 +113,16 @@
       file_type: file
     register: ttyusb_files
 
-
-
-  # once complete remember to change debug back to fail to output error when ttyUSB cannot be detected after installing driver
-
-
-
-
-  - name: Count the number of ttyUSB* devices
+  - name: Count the number of ttyUSB devices
     debug:
-      msg: "Could not detect all four device file (ttyUSB0, ttyUSB1, ttyUSB2, ttyUSB3)"
+      msg: "Could not detect all four device files (ttyUSB0, ttyUSB1, ttyUSB2, ttyUSB3)"
     when: "{{ ttyusb_files.files | length < 4 }}"
 
-  # Installing QMI_WWAN driver
   - name: Install QMI_WWAN driver
     command:
       cmd: "{{ item }}"
       chdir: "{{ remote_quectel_folder }}{{ folder_found[4].split('/')[-1] }}/"
-    with_items:
+    loop:
       - sudo make
       - sudo make install
 
@@ -185,15 +132,15 @@
       path: /etc/modprobe.d/blacklist.conf
       line: "{{ item }}"
       insertafter: EOF
-    with_items:
+    loop:
       - "\n"
       - "blacklist qmi_wwan"
 
-  - name: Disable qmi_wwan and load Quectel qmi_wwan_q (ignore error since command "sudo rmmod qmi_wwan" will throw error if it is not loaded)
+  - name: Disable qmi_wwan and load Quectel qmi_wwan_q (ignore error since command sudo rmmod qmi_wwan will throw error if it is not loaded)
     command:
       cmd: "{{ item }}"
     ignore_errors: true
-    with_items:
+    loop:
       - sudo rmmod qmi_wwan
       - sudo modprobe qmi_wwan_q
 
@@ -206,12 +153,11 @@
   - name: Gather facts about different services
     service_facts:
 
-  - name: Ensure Modem Manager is not running and it is disabled
+  - name: Ensure Modem Manager is not running and is disabled
     fail:
-      msg: "ModemManager service has not fully disabled"
+      msg: "ModemManager service has not been fully disabled"
     when: ansible_facts.services['ModemManager.service']['status'] != 'disabled'
 
-  # Installing Quectel connector manager
   - name: Create udhcpc folder to be used by the system for setting up DNS and route
     file:
       path: /etc/udhcpc
@@ -221,9 +167,9 @@
     command:
       cmd: "{{ item }}"
       chdir: "{{ remote_quectel_folder }}{{ folder_found[1].split('/')[-1] }}/"
-    with_items:
+    loop:
       - sudo cp default.script /etc/udhcpc/
-      - sudo cp default.script u+x
+      - sudo chmod u+x /etc/udhcpc/default.script
       - sudo make
 
   - name: Create minicom dfl file for configuring minicom port
@@ -238,18 +184,17 @@
       path: /etc/minicom/minirc.dfl
       line: "{{ item }}"
       insertafter: EOF
-    with_items:
+    loop:
       - "pu port /dev/ttyUSB2"
       - ""
 
-  # Updating firmware of the respective quectel
   - name: Find all available quectel firmware
     find:
       paths: "{{ remote_quectel_folder }}{{ folder_found[3].split('/')[-1] }}/"
       file_type: directory
     register: firmware_folders
 
-  - name: Retrive available firmware version
+  - name: Retrieve available firmware version
     set_fact:
       firmware_versions: "{{ firmware_versions + [item.path.split('/')[-1]] }}"
     loop: "{{ firmware_folders.files }}"
@@ -264,12 +209,11 @@
     command:
       cmd: "{{ item }}"
       chdir: "{{ remote_quectel_folder }}{{ folder_found[0].split('/')[-1] }}/"
-    with_items:
+    loop:
       - sudo make
       - sudo ./QFirehose -f  "{{ remote_quectel_folder }}{{ folder_found[3].split('/')[-1] }}/{{ selected_firmware_version }}"
     when: "{{ ttyusb_files.files | length >= 4 }}"
 
-  # Copy configuration script for quectel unit
   - name: Copying script for configuring quectel unit from scratch
     copy:
       remote_src: no
@@ -277,7 +221,7 @@
       dest: "{{ remote_quectel_folder }}"
       mode: '666'
 
-  # Installing skylark software
+  # Installing Skylark software
   - name: Copying Skylark CPE folder over to remote location
     copy:
       remote_src: no
@@ -288,11 +232,11 @@
 
   - name: Retrieve all basic deb packages for Skylark
     find:
-      path: "{{ remote_skylark_folder }}debs"
+      paths: "{{ remote_skylark_folder }}debs"
       patterns: "*.deb"
     register: all_available_basic_deb_files_skylark
 
-  - name: Extract Skylark basic deb file name from each of the full path from all_available_basic_deb_files_skylark
+  - name: Extract Skylark basic deb file name from each full path
     set_fact:
       skylark_basic_deb_files: "{{ skylark_basic_deb_files + [item.path] }}"
     loop: "{{ all_available_basic_deb_files_skylark.files }}"
@@ -302,13 +246,13 @@
       cmd: "sudo apt install --fix-broken {{ item }} -y"
     loop: "{{ skylark_basic_deb_files }}"
 
-  - name: Retrieve all deb packages for CPE version for {{ skylark_cpe_folder }}
+  - name: Retrieve all deb packages for CPE version for skylark_cpe_folder
     find:
       paths: "{{ remote_skylark_folder }}{{ skylark_cpe_folder }}"
       patterns: "*deb"
     register: all_available_deb_files_skylark
 
-  - name: Extract Skylark deb file name from each of the full path from all_available_deb_files_skylark
+  - name: Extract Skylark deb file name from each full path
     set_fact:
       skylark_deb_files: "{{ skylark_deb_files + [item.path] }}"
     loop: "{{ all_available_deb_files_skylark.files }}"
@@ -317,3 +261,242 @@
     command:
       cmd: "sudo apt install --fix-broken {{ item }} -y"
     loop: "{{ skylark_deb_files }}"
+
+# Installing SDR software
+
+- name: Install UHD and dependencies
+  hosts: localhost
+  become: yes
+
+  tasks:
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+
+    - name: Install required packages
+      apt:
+        name:
+          - libboost-all-dev
+          - libusb-1.0-0-dev
+          - doxygen
+          - python3-docutils
+          - python3-mako
+          - python3-numpy
+          - python3-requests
+          - python3-ruamel.yaml
+          - python3-setuptools
+          - cmake
+          - build-essential
+        state: present
+
+    - name: Clone UHD repository
+      git:
+        repo: https://github.com/EttusResearch/uhd.git
+        dest: ~/uhd
+        version: v4.4.0.0
+
+    - name: Create build directory
+      file:
+        path: ~/uhd/host/build
+        state: directory
+
+    - name: Run cmake
+      command: cmake ../
+      args:
+        chdir: ~/uhd/host/build
+
+    - name: Build UHD
+      command: make -j "{{ ansible_processor_vcpus }}"
+      args:
+        chdir: ~/uhd/host/build
+
+    - name: Run tests (optional)
+      command: make test
+      args:
+        chdir: ~/uhd/host/build
+      ignore_errors: yes 
+
+    - name: Install UHD
+      command: sudo make install
+      args:
+        chdir: ~/uhd/host/build
+
+    - name: Run ldconfig
+      command: sudo ldconfig
+
+    - name: Download UHD images
+      command: sudo uhd_images_downloader
+
+    - name: Find UHD devices
+      command: sudo uhd_find_devices
+      register: uhd_devices_output
+
+    - name: Display UHD devices output
+      debug:
+        var: uhd_devices_output.stdout
+
+    - name: Verify UHD device output
+      assert:
+        that:
+          - "'UHD Device 0' in uhd_devices_output.stdout"
+          - "'serial' in uhd_devices_output.stdout"
+          - "'product' in uhd_devices_output.stdout"
+        fail_msg: "UHD device not found or incorrect output"
+        success_msg: "UHD device found and output is correct"
+
+    - name: Verify UHD repository cloned successfully
+      stat:
+        path: ~/uhd/.git
+      register: uhd_repo_stat
+
+    - name: Fail if UHD repository was not cloned
+      fail:
+        msg: "UHD repository not cloned successfully"
+      when: not uhd_repo_stat.stat.exists
+
+    - name: Verify UHD build directory exists
+      stat:
+        path: ~/uhd/host/build
+      register: uhd_build_dir_stat
+
+    - name: Fail if UHD build directory does not exist
+      fail:
+        msg: "UHD build directory not created"
+      when: not uhd_build_dir_stat.stat.exists
+
+    - name: Verify UHD build completed
+      stat:
+        path: ~/uhd/host/build/uhd.usr
+      register: uhd_build_stat
+
+    - name: Fail if UHD build was not successful
+      fail:
+        msg: "UHD build did not complete successfully"
+      when: not uhd_build_stat.stat.exists
+
+    - name: Verify UHD installed successfully
+      command: uhd_usrp_probe
+      register: uhd_usrp_probe_output
+      ignore_errors: yes
+
+    - name: Display uhd_usrp_probe output
+      debug:
+        var: uhd_usrp_probe_output.stdout
+
+    - name: Fail if uhd_usrp_probe failed
+      fail:
+        msg: "UHD installation failed, uhd_usrp_probe did not succeed"
+      when: uhd_usrp_probe_output.failed
+
+
+- name: Install Docker and SDR Docker Images
+  hosts: localhost
+  become: yes
+
+  tasks:
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+
+    - name: Install prerequisite packages
+      apt:
+        name:
+          - ca-certificates
+          - curl
+        state: present
+
+    - name: Add Docker's official GPG key
+      command: >
+        sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+      args:
+        creates: /etc/apt/keyrings/docker.asc
+
+    - name: Ensure /etc/apt/keyrings directory exists
+      file:
+        path: /etc/apt/keyrings
+        state: directory
+        mode: '0755'
+
+    - name: Change permissions of Docker GPG key
+      file:
+        path: /etc/apt/keyrings/docker.asc
+        mode: '0644'
+
+    - name: Add Docker repository to Apt sources
+      shell: |
+        echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+      args:
+        creates: /etc/apt/sources.list.d/docker.list
+
+    - name: Update apt cache again
+      apt:
+        update_cache: yes
+
+    - name: Install Docker packages
+      apt:
+        name:
+          - docker-ce
+          - docker-ce-cli
+          - containerd.io
+          - docker-buildx-plugin
+          - docker-compose-plugin
+        state: present
+
+    - name: Verify Docker installation with hello-world
+      command: sudo docker run hello-world
+      register: docker_hello_world_output
+
+    - name: Display Docker hello-world output
+      debug:
+        var: docker_hello_world_output.stdout
+
+    - name: Pull SDR Docker image
+      docker_image:
+        name: arawirelesshub/openairinterface5g:ag_ue
+        source: pull
+
+    - name: Fail if Docker GPG key does not exist
+      fail:
+        msg: "Docker GPG key was not added successfully"
+      when: not docker_gpg_key_stat.stat.exists
+
+    - name: Verify Docker repository was added to sources
+      stat:
+        path: /etc/apt/sources.list.d/docker.list
+      register: docker_repo_stat
+
+    - name: Fail if Docker repository was not added
+      fail:
+        msg: "Docker repository was not added successfully"
+      when: not docker_repo_stat.stat.exists
+
+    - name: Verify Docker installation
+      command: sudo docker --version
+      register: docker_version_output
+      ignore_errors: yes
+
+    - name: Display Docker version
+      debug:
+        var: docker_version_output.stdout
+
+    - name: Fail if Docker installation failed
+      fail:
+        msg: "Docker installation failed"
+      when: docker_version_output.failed
+
+    - name: Verify SDR Docker image pulled successfully
+      docker_image_facts:
+        name: arawirelesshub/openairinterface5g:ag_ue
+      register: sdr_docker_image_facts
+
+    - name: Fail if SDR Docker image not pulled
+      fail:
+        msg: "SDR Docker image was not pulled successfully"
+      when: sdr_docker_image_facts.images | length == 0
+
+
+    - name: Verify Docker GPG key exists
+  stat:
+    path: /etc/apt/keyrings/docker.asc
+  register: docker_gpg_key_stat
+
