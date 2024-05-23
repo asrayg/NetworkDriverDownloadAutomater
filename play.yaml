@@ -390,7 +390,7 @@
 
 
 - name: Install Docker and SDR Docker Images
-  hosts: localhost
+  hosts: all
   become: yes
 
   tasks:
